@@ -17,6 +17,7 @@ import os
 import random
 import sys
 import time,re
+import uuid
 import urllib.parse
 #import notify
 
@@ -235,6 +236,8 @@ def sunbw(N, opts=None):
         Order_data = []
         req_et = []
         loop_times = 2
+        imgBasic="//img14.360buyimg.com/shaidan/"
+
         opts['logger'].debug('Fetching website data')
         opts['logger'].debug('Total loop times: %d', loop_times)
         for i in range(loop_times):
@@ -315,6 +318,7 @@ def sunbw(N, opts=None):
                     opts['logger'].warning(
                         'Status code of the response is %d, not 200', req1.status_code)
                 imgdata = req1.json()
+
                 opts['logger'].debug('Image data: %s', imgdata)
                 if imgdata["imgComments"]["imgCommentCount"] > 10:
                     pnum = random.randint(2,int(imgdata["imgComments"]["imgCommentCount"]/10)+1)
@@ -346,6 +350,47 @@ def sunbw(N, opts=None):
                 opts['logger'].debug('Image URL: %s', imgurl)
                 
                 opts['logger'].info(f'图片：{imgurl + "," + imgurl2}')
+                upload_url="https://club.jd.com/myJdcomments/ajaxUploadImage.action"
+
+                # TODO 此处下载图片
+                imgName1=generate_unique_filename()
+                opts['logger'].debug(f'Image :{imgName1}')
+
+                if imgurl!="":
+
+                    # 下载图片
+                    downloaded_file1 = download_image(imgurl, imgName1)
+                    session = requests.Session()
+
+                    # 上传图片
+                    if downloaded_file1:
+                        imgPart1 = upload_image(imgName1,session,headers, upload_url)
+                        print(imgPart1)                # 和上传图片操作
+                        if imgPart1!="":
+                            imgurl=f"{imgBasic}{imgPart1}"
+                        else:
+                            imgurl=""
+
+                imgName2=generate_unique_filename()
+                opts['logger'].debug(f'Image :{imgName2}')
+
+                if imgurl2!="":
+                    # 下载图片
+                    downloaded_file2 = download_image(imgurl2, imgName2)
+
+                    # 上传图片
+                    if downloaded_file2:
+                        imgPart2 = upload_image(imgName2,session,headers, upload_url)
+                        print(imgPart2)                # 和上传图片操作
+                        if imgPart2!="":
+                            imgurl2=f"{imgBasic}{imgPart2}"
+                        else:
+                            imgurl2=""
+
+
+                opts['logger'].info(f'imgurl :{imgurl}')
+                opts['logger'].info(f'imgurl2 :{imgurl2}')
+
                 # 提交晒单
                 opts['logger'].debug('Preparing for commenting')
                 url2 = "https://club.jd.com/myJdcomments/saveProductComment.action"
@@ -366,6 +411,7 @@ def sunbw(N, opts=None):
                 opts['logger'].debug('Data: %s', data)
                 if not opts.get('dry_run'):
                     opts['logger'].debug('Sending comment request')
+                    # TODO 暂时注释掉 不执行。
                     pj2 = requests.post(url2, headers=headers, data=data)
                     if pj2.ok:
                         opts['logger'].info(f'提交成功！')
@@ -379,6 +425,50 @@ def sunbw(N, opts=None):
         return N
     except Exception as e:
         print (e)
+
+def generate_unique_filename():
+    # 获取当前时间戳的最后5位
+    timestamp = str(int(time.time()))[-5:]
+    
+    # 生成 UUID 的前5位
+    unique_id = str(uuid.uuid4().int)[:5]
+    
+    # 组合生成10位的唯一文件名
+    unique_filename = f"{timestamp}{unique_id}.jpg"
+    
+    return unique_filename
+
+# 下载图片
+def download_image(img_url, file_name):
+    fullUrl=f"https:{img_url}"
+    response = requests.get(fullUrl)
+    if response.status_code == 200:
+        with open(file_name, 'wb') as file:
+            file.write(response.content)
+        return file_name
+    else:
+        print("Failed to download image")
+        return None
+
+# 上传图片到JD接口
+def upload_image(file_path,session,headers, upload_url):
+
+    files = {
+        'name': (None, file_path),
+        # 不需要 PHPSESSID 时可以忽略
+        # 如果需要的话，可以从初次登录响应中获取
+        'Filedata': (file_path, open(file_path, 'rb'), 'image/jpeg')
+    }
+
+    # 发起 POST 请求
+    response = session.post('https://club.jd.com/myJdcomments/ajaxUploadImage.action', headers=headers, files=files)
+
+    # 查看响应
+    print(response.status_code)
+    print(response.text)
+
+    return response.text
+
 
 # 追评
 def review(N, opts=None):
